@@ -90,7 +90,7 @@
 # py .\rl_pipeline3_rs_std_patched.py splityear --oos-days 42 --episodes 200 --model-prefix dqn_sy --alpaca-update --since 2023-01-01
 
 #RUN to infer
-#$env:ALPACA_FEED="iex"; $syms=@("IBM","RGTI","QBTS","QUBT",'IONQ', "QS", "AMD",    "SLDP",    "MSFT",    "CHGG",    "AI",    "NVDA",    "TSM",    "GOOGL",    "AMD",  "PAYO", "LCID",  "PLUG",    "BYND",    "IBM",     "TM","SPY","CHGG","AI","NKLA","AMC","BYND" ,    "TDC", "INFA","SNOW",    "PSTG","MDB", "FSLR",'ENPH','SEDG','ARRY','NXT','ENVX','MVST','EOSE','FLNC','EVGO','ITRI','AMSC','POWI','VICR','NVTS','CLNE','GEVO','MNTK','ELVA','XEL','AEP','RNW',"INTC", "ARQQ","MU","SMCI", "TRV","PGR","BHP","COST","MRK","NFLX","RMBS","ALB","VZ","SLDPW","AAPL","PG","ROP"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-08-05 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
+# $env:ALPACA_FEED="iex"; $syms=@("IBM","RGTI","QBTS","QUBT",'IONQ', "QS", "AMD",    "SLDP",    "MSFT",    "CHGG",    "AI",    "NVDA",    "TSM",    "GOOGL",    "AMD",  "PAYO", "LCID",  "PLUG",    "BYND", "TM","NKLAQ","AMC","BYND" ,    "TDC", "INFA","SNOW",    "PSTG","MDB", "FSLR",'ENPH','SEDG','ARRY','NXT','ENVX','MVST','EOSE','FLNC','EVGO','ITRI','AMSC','POWI','VICR','NVTS','CLNE','GEVO','MNTK','ELVA','XEL','AEP','RNW',"INTC", "ARQQ","MU","SMCI", "TRV","PGR","BHP","COST","MRK","NFLX","RMBS","ALB","VZ","SLDPW","AAPL","PG","ROP"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-08-05 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
 
 from __future__ import annotations
 import os, sys, math, time, random, argparse
@@ -494,6 +494,19 @@ DATA_SOURCES: Dict[str,str] = {
     "AAPL":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AAPL_30s.csv",
     "PG":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PG_30s.csv",
     "ROP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ROP_30s.csv",
+    "NKLAQ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NKLAQ_30s.csv",
+    "KO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KO_30s.csv",
+    "PEP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PEP_30s.csv",
+    "T":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\T_30s.csv",
+    "TMUS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TMUS_30s.csv",
+    "CMCSA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CMCSA_30s.csv",
+    "CCI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KR_30s.csv",
+        
+    "KR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KR_30s.csv",
+    "MDLZ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MDLZ_30s.csv",
+    "GIS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GIS_30s.csv",
+    "CBP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CBP_30s.csv",
+    "MKC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MKC_30s.csv"
 
 }
 DAILY_CACHE_DIR = Path("daily_cache")
