@@ -87,10 +87,10 @@
 # Remove-Item -Recurse -Force .\daily_cache\
 
 #RUN to train
-# py .\rl_pipeline3_rs_std_patched.py splityear --oos-days 42 --episodes 200 --model-prefix dqn_sy --alpaca-update --since 2023-01-01
+# py .\rl_pipeline3_rs_std_patched.py splityear --oos-days 42 --episodes 200 --model-prefix dqn_sy --alpaca-update --since 2024-01-01
 
 #RUN to infer
-# $env:ALPACA_FEED="iex"; $syms=@("IBM","RGTI","QBTS","QUBT",'IONQ', "QS", "AMD",    "SLDP",    "MSFT",    "CHGG",    "AI",    "NVDA",    "TSM",    "GOOGL",    "AMD",  "PAYO", "LCID",  "PLUG",    "BYND", "TM","NKLAQ","AMC","BYND" ,    "TDC", "INFA","SNOW",    "PSTG","MDB", "FSLR",'ENPH','SEDG','ARRY','NXT','ENVX','MVST','EOSE','FLNC','EVGO','ITRI','AMSC','POWI','VICR','NVTS','CLNE','GEVO','MNTK','ELVA','XEL','AEP','RNW',"INTC", "ARQQ","MU","SMCI", "TRV","PGR","BHP","COST","MRK","NFLX","RMBS","ALB","VZ","SLDPW","AAPL","PG","ROP"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-08-05 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
+# $env:ALPACA_FEED="iex"; $syms=@("AAPL", "AEP", "AI", "ALB", "AMD", "AMSC", "ARQQ", "ARRY", "BHP", "BYND", "CHGG","ORA", "CLNE", "COST", "ELVA", "ENPH", "ENVX", "EOSE", "EVGO", "FLNC", "FSLR", "GEVO", "GOOGL", "IBM", "INFA", "INTC", "IONQ", "ITRI", "LCID", "MDB", "MNTK", "MRK", "MSFT", "MU", "MVST", "NFLX", "NKLAQ", "NVDA", "NVTS", "NXT", "PAYO", "PG", "PGR", "PLUG", "POWI", "PSTG", "QBTS", "QS", "QUBT", "RGTI", "RMBS", "RNW", "ROP", "SEDG", "SLDP", "SLDPW", "SMCI", "SNOW", "TDC", "TM", "TRV", "TSM", "VICR", "VZ", "XEL"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-10-15 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
 
 from __future__ import annotations
 import os, sys, math, time, random, argparse
@@ -465,13 +465,15 @@ DATA_SOURCES: Dict[str,str] = {
     "MVST":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MVST_30s.csv",
     "EOSE":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\EOSE_30s.csv",
     "FLNC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\FLNC_30s.csv",
-    "EVG0":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\EVGO_30s.csv",
+    "EVGO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\EVGO_30s.csv",
     "ITRI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ITRI_30s.csv",
     "AMSC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AMSC_30s.csv",
-    "POWI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\INFA_30s.csv",
-    "VICR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\SNOW_30s.csv",
-    "NVTS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PSTG_30s.csv",
-    "CLNE":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MDB_30s.csv",
+    
+    "POWI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\POWI_30s.csv",
+    "VICR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\VICR_30s.csv",
+    "NVTS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NVTS_30s.csv",
+    "CLNE":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CLNE_30s.csv",
+    
     "GEVO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GEVO_30s.csv",
     "MNTK":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MNTK_30s.csv",
     "ELVA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ELVA_30s.csv",
@@ -500,13 +502,15 @@ DATA_SOURCES: Dict[str,str] = {
     "T":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\T_30s.csv",
     "TMUS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TMUS_30s.csv",
     "CMCSA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CMCSA_30s.csv",
-    "CCI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KR_30s.csv",
-        
+    
+    "CCI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CCI_30s.csv",
     "KR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KR_30s.csv",
     "MDLZ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MDLZ_30s.csv",
     "GIS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GIS_30s.csv",
     "CBP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CBP_30s.csv",
-    "MKC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MKC_30s.csv"
+    "MKC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MKC_30s.csv",
+    "NOK":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NOK_30s.csv"
+
 
 }
 DAILY_CACHE_DIR = Path("daily_cache")
