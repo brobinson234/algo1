@@ -1,86 +1,239 @@
-# rl_pipeline3_rs_std_patched.py
-# One-stop RL pipeline with prod/exp isolation, walkleader tagging, and promotion.
+# cli for exploratory model training that uses all symbols listed in the file  note the need to update that date for the run
 
-# # =========================
-# # TRAIN / EVAL / COMPARE
-# # =========================
-# # Train a general 1y policy (PROD; writes to ./models)
-# py rl_pipeline3_rs_std_patched.py train --episodes 250 --model models/dqn_policy_1y.pt
+# .\.venv\Scripts\Activate.ps1
 
-# # Train (EXPERIMENT; isolated under ./experiments/<exp-id>/)
-# py rl_pipeline3_rs_std_patched.py train --profile exp --exp-id 2025-10-19_guard_sweep_A --episodes 250 --model models/dqn_policy_1y.pt
+# python .\rl_pipeline3_rs_std_patched.py `
+#   --profile exp --exp-id 2025-11-08_sy_ALL `
+#   splityear `
+#   --episodes 400 --oos-days 42 --model-prefix dqn_sy_explore `
+#   --eps-start 1.0 --eps-end 0.06 --eps-decay 0.997 `
+#   --updates-per-step 1 --batch 256 --target-sync 500 --update-after 600
 
-# # Evaluate a saved model (PROD)
-# py rl_pipeline3_rs_std_patched.py eval --model models/dqn_policy_1y.pt
+# this then pulls those tests into production
+# Pull unique symbols from the experiment’s split-year summary
+# $exp = "2025-11-08_sy_ALL"
+# $csv = ".\experiments\$exp\logs\out\splityear_summary.csv"
 
-# # Compare RL vs Rule on same window (PROD)
-# py rl_pipeline3_rs_std_patched.py compare --model models/dqn_policy_1y.pt
-
-
-# # =========================
-# # SPLIT-YEAR (per symbol)
-# # =========================
-# # Per-symbol train+OOS eval (PROD; updates ./models/<SYM>/LATEST.txt)
-# py rl_pipeline3_rs_std_patched.py splityear --oos-days 42 --episodes 200 --model-prefix dqn_sy
-
-# # Same, isolated EXPERIMENT (writes to ./experiments/<exp-id>/models)
-# py rl_pipeline3_rs_std_patched.py splityear --profile exp --exp-id 2025-10-19_guard_sweep_A --oos-days 42 --episodes 200 --model-prefix dqn_sy
+# $syms = (Import-Csv $csv).symbol | Sort-Object -Unique
+# foreach ($s in $syms) {
+#   python .\rl_pipeline3_rs_std_patched.py promote --exp-id $exp --symbol $s
+# }
 
 
-# # =========================
-# # SPLIT-YEAR POOLED
-# # =========================
-# # Pooled cash run over a list (PROD)
-# py rl_pipeline3_rs_std_patched.py splityear-pooled --symbols QS,MSFT,NVDA --oos-days 42 --episodes 200 --model-prefix dqn_sy --invest-per-symbol 100 --start-cash-extra 0 --mom-window 20 --mom-scale-low 0.8 --mom-scale-high 1.3
 
-# # Same, isolated EXPERIMENT
-# py rl_pipeline3_rs_std_patched.py splityear-pooled --profile exp --exp-id 2025-10-19_guard_sweep_A --symbols QS,MSFT,NVDA --oos-days 42 --episodes 200 --model-prefix dqn_sy
-
-
-# # =========================
-# # INFERENCE / EXPORT
-# # =========================
-# # Inference on the latest bar (PROD; uses prod LATEST by default)
-# py rl_pipeline3_rs_std_patched.py infer --symbol NVDA --log-csv ./logs
-
-# # Inference within an EXPERIMENT (uses that exp’s LATEST)
-# py rl_pipeline3_rs_std_patched.py infer --profile exp --exp-id 2025-10-19_guard_sweep_A --symbol NVDA --log-csv ./logs
-
-# # Export greedy actions per bar to CSV (PROD)
-# py rl_pipeline3_rs_std_patched.py export-actions --symbol NVDA --model models/dqn_policy_1y.pt
+# to make daily inference 
+# $env:ALPACA_FEED = "iex"
+# .\.venv\Scripts\python.exe .\rl_pipeline3_rs_std_patched.py `
+#   --profile prod `
+#   live `
+#   --alpaca-update --since 2025-10-15 `
+#   --model-prefix dqn_sy `
+#   --log-csv .\logs `
+#   --snapshot-file .\out\live_snapshot.csv `
+#   --order-file .\out\orders_moc.csv `
+#   --cutoff 15:00
 
 
-# # =========================
-# # WALK-FORWARD / LEADERBOARD
-# # =========================
-# # Rolling train->test (PROD)
-# py rl_pipeline3_rs_std_patched.py walkforward --train-days 504 --test-days 21 --episodes 100 --model models/dqn_wf.pt --symbols QS,MSFT
-
-# # Leaderboard (EXPERIMENT by tag; detail/summary auto to experiments/<tag>/logs/out)
-# py rl_pipeline3_rs_std_patched.py walkleader --train-days 504 --test-days 21 --episodes 120 --symbols QS,MSFT,NVDA --tag weekly_run --detail "" --summary ""
-
-# # (Optional helpers to match the tuning playbook; EXPERIMENT scope)
-# py rl_pipeline3_rs_std_patched.py wl-analyze --profile exp --exp-id weekly_run
-# py rl_pipeline3_rs_std_patched.py wl-apply-winners --profile exp --exp-id weekly_run
-# py rl_pipeline3_rs_std_patched.py wl-retrain-winners --profile exp --exp-id weekly_run
 
 
-# # =========================
-# # LIVE DECISIONS (PROD ONLY)
-# # =========================
-# # 3pm ET decision: freeze features, inject live price; write MOC suggestions
-# py rl_pipeline3_rs_std_patched.py live --symbols "IBM","RGTI","QBTS","QUBT",'IONQ', "QS", "AMD",    "SLDP",    "MSFT",    "CHGG",    "AI",    "NVDA",    "TSM",    "GOOGL",    "AMD",  "PAYO", "LCID",  "PLUG",    "BYND",    "IBM",     "TM","SPY","CHGG","AI","NKLA","AMC","BYND" ,    "TDC", "INFA","SNOW",    "PSTG","MDB", "FSLR",'ENPH','SEDG','ARRY','NXT','ENVX','MVST','EOSE','FLNC','EVGO','ITRI','AMSC','POWI','VICR','NVTS','CLNE','GEVO','MNTK','ELVA','XEL','AEP','RNW',"INTC", "ARQQ","MU","SMCI", "TRV","PGR","BHP","COST","MRK","NFLX","RMBS","ALB","VZ","SLDPW","AAPL","PG","ROP" --model-prefix dqn_splityear --cash-per-symbol 1000 --order-file orders_moc.csv --snapshot-file live_snapshot.csv --log-csv ./logs
-
-# # Refresh data, retrain per symbol, and (optionally) place immediate orders
-# py rl_pipeline3_rs_std_patched.py train-today-and-trade --symbols "IBM","RGTI","QBTS","QUBT",'IONQ', "QS", "AMD",    "SLDP",    "MSFT",    "CHGG",    "AI",    "NVDA",    "TSM",    "GOOGL",    "AMD",  "PAYO", "LCID",  "PLUG",    "BYND",    "IBM",     "TM","SPY","CHGG","AI","NKLA","AMC","BYND" ,    "TDC", "INFA","SNOW",    "PSTG","MDB", "FSLR",'ENPH','SEDG','ARRY','NXT','ENVX','MVST','EOSE','FLNC','EVGO','ITRI','AMSC','POWI','VICR','NVTS','CLNE','GEVO','MNTK','ELVA','XEL','AEP','RNW',"INTC", "ARQQ","MU","SMCI", "TRV","PGR","BHP","COST","MRK","NFLX","RMBS","ALB","VZ","SLDPW","AAPL","PG","ROP" --episodes 120 --model-prefix dqn_today --cash-per-symbol 1000 --tif ioc --order-file orders_immediate.csv --snapshot-file train_trade_snapshot.csv --dry-run
 
 
-# # =========================
-# # PROMOTE EXPERIMENT → PROD
-# # =========================
-# # Copy latest model for a symbol from experiments/<exp-id>/ into prod models/
-# py rl_pipeline3_rs_std_patched.py promote --exp-id 2025-10-19_guard_sweep_A --symbol NVDA
 
+# """
+# ===============================================================================
+# RL PIPELINE — COMMAND GUIDE & WORKFLOWS
+# ===============================================================================
+# Quick start:
+#     # PowerShell (Windows): use backticks ` for line continuation
+#     (.venv) PS> python .\rl_pipeline3_rs_std_patched.py -h
+
+#     # Bash/macOS/Linux: use backslashes \ for line continuation
+#     (.venv) $ python ./rl_pipeline3_rs_std_patched.py -h
+
+# -------------------------------------------------------------------------------
+# DATA & SYMBOLS
+# -------------------------------------------------------------------------------
+# - Local historical data is discovered from DATA_SOURCES built at import time:
+#     <DATA_DIR>/<SYMBOL>_30s.csv
+#   Only symbols with local files are considered valid.
+
+# - Symbol selection precedence (handled by resolve_symbols(args)):
+#     1) --symbol NVDA                  (single)
+#     2) --symbols NVDA,AAPL,MSFT       (comma-separated)
+#     3) --symbols-file ./universe.txt  (one ticker per line, '#' for comments)
+#     4) Fallback to all symbols found on disk (DATA_SOURCES.keys()).
+
+# - Many commands accept either a single symbol or a set via the options above.
+
+# -------------------------------------------------------------------------------
+# PROFILES & ARTIFACTS
+# -------------------------------------------------------------------------------
+# - --profile prod|exp
+#     prod:    uses ./models, ./logs, ./out (live-style commands enabled).
+#     exp:     isolates under ./experiments/<exp-id> (live-style commands blocked).
+
+# - --exp-id <name>  (required when --profile=exp)
+#     Example folder layout:
+#       experiments/<exp-id>/
+#         models/    logs/    out/    manifests/
+
+# -------------------------------------------------------------------------------
+# COMMON FLAGS (selected)
+# -------------------------------------------------------------------------------
+# - Training/exploration:
+#     --episodes N           DQN training episodes
+#     --eps-start/--eps-end/--eps-decay  ε-greedy schedule
+#     --batch BATCH_SIZE     minibatch size
+#     --updates-per-step K   learner updates per env step
+#     --target-sync N        target net sync frequency
+#     --update-after N       warmup steps before learning
+
+# - Reward shaping / guards (applied to env):
+#     --lambda-neg, --lambda-dd, --reward-clip, --turnover-penalty,
+#     --regime-penalty, --high-atr-q
+
+# - Data refresh knobs (if exposed in add_common):
+#     --alpaca-update        (bool) refresh from API before run
+#     --since YYYY-MM-DD     minimum date to load/update
+
+# -------------------------------------------------------------------------------
+# WORKFLOW A — SPLIT-YEAR TRAINING (per-symbol models, OOS eval)
+# -------------------------------------------------------------------------------
+# - Trains each symbol on the last 1y minus OOS, evaluates on reserved OOS,
+#   and saves models as:  models/<prefix>_<SYMBOL>.pt
+
+# PowerShell:
+#     python .\rl_pipeline3_rs_std_patched.py `
+#       --profile exp --exp-id 2025-11-08_sy_NVDA `
+#       splityear `
+#       --symbols NVDA `
+#       --episodes 600 --oos-days 42 --model-prefix dqn_sy_explore `
+#       --eps-start 1.0 --eps-end 0.06 --eps-decay 0.998 `
+#       --updates-per-step 2 --batch 512 --target-sync 300 --update-after 600
+
+# Bash:
+#     python ./rl_pipeline3_rs_std_patched.py \
+#       --profile exp --exp-id 2025-11-08_sy_NVDA \
+#       splityear \
+#       --symbols NVDA \
+#       --episodes 600 --oos-days 42 --model-prefix dqn_sy_explore \
+#       --eps-start 1.0 --eps-end 0.06 --eps-decay 0.998 \
+#       --updates-per-step 2 --batch 512 --target-sync 300 --update-after 600
+
+# - Multi-symbol:
+#     Use --symbols AAPL,MSFT or --symbols-file ./universe.txt
+#     (Only symbols with local data are used; others are skipped.)
+
+# - Optional per-symbol shaping overrides:
+#     CSV at out/per_symbol_knobs.csv (columns can include)
+#       symbol,lambda_neg,lambda_dd,reward_clip,regime_penalty,high_atr_q,turnover_penalty
+
+# -------------------------------------------------------------------------------
+# WORKFLOW B — POOLED OOS (momentum sizing over symbols)
+# -------------------------------------------------------------------------------
+# - Trains a single pooled policy on the union of train windows; evaluates OOS
+#   across the set with momentum-based position scaling.
+# - Saves model: models/<prefix>_POOLED.pt and CSVs: pooled_equity.csv, pooled_trades.csv
+
+# PowerShell:
+#     python .\rl_pipeline3_rs_std_patched.py `
+#       --profile exp --exp-id 2025-11-08_pool `
+#       splityear-pooled `
+#       --symbols-file .\universe.txt `
+#       --oos-days 42 --episodes 300 --model-prefix dqn_sy `
+#       --invest-per-symbol 100 --start-cash-extra 0 `
+#       --mom-window 20 --mom-scale-low 0.8 --mom-scale-high 1.3
+
+# -------------------------------------------------------------------------------
+# WORKFLOW C — WALK-FORWARD (rolling train→test)
+# -------------------------------------------------------------------------------
+# - Repeatedly trains on a rolling window, tests on next block, steps forward.
+# - Saves per-run CSV (e.g., wf_results.csv or within exp logs).
+
+# PowerShell:
+#     python .\rl_pipeline3_rs_std_patched.py `
+#       --profile exp --exp-id 2025-11-08_wf `
+#       walkforward `
+#       --symbols-file .\universe.txt `
+#       --train-days 504 --test-days 21 --episodes 120 `
+#       --eps-start 1.0 --eps-end 0.05 --eps-decay 0.995 `
+#       --updates-per-step 1 --batch 256 --target-sync 500 --update-after 800
+
+# -------------------------------------------------------------------------------
+# WORKFLOW D — EVALUATION & COMPARISON
+# -------------------------------------------------------------------------------
+# - eval        : Evaluate a saved model on the latest 1y window and plot equity.
+# - compare     : Compare Rule baseline vs RL on the same 1y window.
+
+# Examples:
+#     # Evaluate a generic policy file
+#     python rl_pipeline3_rs_std_patched.py eval --symbol NVDA --model models/dqn_policy_1y.pt
+
+#     # Compare rule vs RL
+#     python rl_pipeline3_rs_std_patched.py compare --symbol NVDA --model models/dqn_policy_1y.pt
+
+# -------------------------------------------------------------------------------
+# WORKFLOW E — INFERENCE (single latest decision)
+# -------------------------------------------------------------------------------
+# - infer: deterministic action on the most recent bar.
+#   Useful for debugging, dashboards, or logging daily actions.
+
+#     python rl_pipeline3_rs_std_patched.py infer --symbol NVDA \
+#         --model models/dqn_splityear_NVDA.pt \
+#         --provisional-today \
+#         --save-csv out/infer_nvda.csv --log-csv logs
+
+# -------------------------------------------------------------------------------
+# WORKFLOW F — LIVE (3pm ET decisions)  **prod profile only**
+# -------------------------------------------------------------------------------
+# - live: Freezes features at yesterday, injects cutoff price, outputs MOC orders.
+
+#     python rl_pipeline3_rs_std_patched.py --profile prod live \
+#         --symbols-file ./live_universe.txt \
+#         --model models/dqn_policy_1y.pt \
+#         --model-prefix dqn_splityear \
+#         --cash-per-symbol 1000 \
+#         --cutoff 15:00 \
+#         --order-file orders_moc.csv \
+#         --snapshot-file live_snapshot.csv
+
+# Note: 'live' is blocked in --profile exp for safety.
+
+# -------------------------------------------------------------------------------
+# WORKFLOW G — TRAIN TODAY & TRADE (IMMEDIATE)  **prod profile only**
+# -------------------------------------------------------------------------------
+# - train-today-and-trade: Refresh data, train per symbol, place immediate orders
+#   (or dry-run). Intended for intraday experimentation or paper trading.
+
+#     python rl_pipeline3_rs_std_patched.py --profile prod train-today-and-trade \
+#         --symbols AAPL,MSFT \
+#         --episodes 120 --model-prefix dqn_today \
+#         --cash-per-symbol 1000 --tif ioc \
+#         --order-file orders_immediate.csv \
+#         --snapshot-file train_trade_snapshot.csv \
+#         --dry-run
+
+# -------------------------------------------------------------------------------
+# UTILITIES
+# -------------------------------------------------------------------------------
+# - export-actions: dump a greedy action log to CSV for a symbol.
+#     python rl_pipeline3_rs_std_patched.py export-actions --symbol NVDA --model models/dqn_splityear_NVDA.pt
+
+# - promote: copy a per-symbol experiment model into prod (overwrites if exists).
+#     python rl_pipeline3_rs_std_patched.py promote --exp-id 2025-11-08_sy_NVDA --symbol NVDA
+
+# -------------------------------------------------------------------------------
+# NOTES
+# -------------------------------------------------------------------------------
+# - If running on Windows PowerShell, use backticks (`) for line continuation.
+# - In --profile exp runs, outputs (detail/summary) default into experiments/<exp-id>/logs/out.
+# - For walk-forward / pooled, a temporary model may be used during rolls; summary CSVs
+#   capture metrics. For splityear, per-symbol models are persisted under models/.
+# - All symbol selection routes are intersected with DATA_SOURCES to guarantee
+#   that only symbols with local data are used.
+
+# ===============================================================================
+# """
 
 # to clear cache run:
 # Set-Location C:\Users\brobi\OneDrive\Desktop\Algo1
@@ -91,6 +244,12 @@
 
 #RUN to infer
 # $env:ALPACA_FEED="iex"; $syms=@("AAPL", "AEP", "AI", "ALB", "AMD", "AMSC", "ARQQ", "ARRY", "BHP", "BYND", "CHGG","ORA", "CLNE", "COST", "ELVA", "ENPH", "ENVX", "EOSE", "EVGO", "FLNC", "FSLR", "GEVO", "GOOGL", "IBM", "INFA", "INTC", "IONQ", "ITRI", "LCID", "MDB", "MNTK", "MRK", "MSFT", "MU", "MVST", "NFLX", "NKLAQ", "NVDA", "NVTS", "NXT", "PAYO", "PG", "PGR", "PLUG", "POWI", "PSTG", "QBTS", "QS", "QUBT", "RGTI", "RMBS", "RNW", "ROP", "SEDG", "SLDP", "SLDPW", "SMCI", "SNOW", "TDC", "TM", "TRV", "TSM", "VICR", "VZ", "XEL"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-10-15 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
+
+# $env:ALPACA_FEED="iex"; $syms=@( "IBM","RGTI","QBTS","QUBT","IONQ","QS","AMD","SLDP","MSFT","CHGG","AI","NVDA","TSM","GOOGL", "PAYO","LCID","PLUG","BYND","TM","SPY","AMC","TDC","INFA","SNOW","PSTG","MDB","FSLR", "ENPH","SEDG","ARRY","NXT","ENVX","MVST","EOSE","FLNC","EVGO","ITRI","AMSC","POWI","VICR", "NVTS","CLNE","GEVO","MNTK","ELVA","XEL","AEP","RNW","INTC","ARQQ","MU","SMCI","TRV","PGR", "BHP","COST","MRK","NFLX","RMBS","ALB","VZ","AAPL","PG","ROP","KO","PEP","T","TMUS","CMCSA", "CCI","KR","MDLZ","GIS","MKC","NOK", "AVGO","ASML","CSCO","AZN","SHOP","APP","LIN","LRCX","QCOM","PDD", "ISRG","INTU","ARM","AMAT","BKNG","KLAC","AMGN","TXN","PANW","ADBE","GILD","CRWD","HON","CEG", "ADI","MELI","ADP","DASH","VRTX","SBUX","CDNS","SNPS","MSTR","ORLY","ABNB","MRVL","CTAS","MAR", "TRI","PYPL","REGN","MNST","CSX","ADSK","FTNT","WDAY","AXON","DDOG","NXPI","ROST","ZS","WBD", "PCAR","IDXX","EA","EXC","FAST","BKR","TTWO","PAYX","TEAM","CPRT","CCEP","FANG","KDP","GEHC", "MCHP","CHTR","CTSH","VRSK","CSGP","KHC","ODFL","DXCM","TTD","BIIB","LULU","ON","CDW","GFS", "ATO","EVRG","WEC","COR","JNJ","TJX","CMS","PPL","DUK"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-10-15 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
+
+
+
+
 
 from __future__ import annotations
 import os, sys, math, time, random, argparse
@@ -107,6 +266,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import math
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
@@ -431,94 +591,93 @@ if not hasattr(bt, "add_guardrails_and_filters"):
 # =========================
 # User paths (EDIT THESE)
 # =========================
-DATA_SOURCES: Dict[str,str] = {
-    "QS":   r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\QS_30s.csv",
-    "SLDP": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\SLDP_30s.csv",
-    "MSFT": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MSFT_30s.csv",
-    "CHGG": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CHGG_30s.csv",
-    "AI":   r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AI_30s.csv",
-    "NVDA": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NVDA_30s.csv",
-    "TSM":  r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TSM_30s.csv",
-    "GOOGL":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GOOGL_30s.csv",
-    "AMD":  r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AMD_30s.csv",
-    "PAYO": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PAYO_30s.csv",
-    "LCID": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\LCID_30s.csv",
-    "PLUG": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PLUG_30s.csv",
-    "BYND": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\BYND_30s.csv",
-    "IBM":  r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\IBM_30s.csv",
-    "RGTI": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\RGTI_30s.csv",
-    "QBTS": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\QBTS_30s.csv",
-    "QUBT": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\QUBT_30s.csv",
-    "IONQ": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\IONQ_30s.csv",
-    "TM": r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TM_30s.csv",
-    "TDC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TDC_30s.csv",
-    "INFA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\INFA_30s.csv",
-    "SNOW":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\SNOW_30s.csv",
-    "PSTG":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PSTG_30s.csv",
-    "MDB":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MDB_30s.csv",
-    "FSLR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\FSLR_30s.csv",
-    "ENPH":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ENPH_30s.csv",
-    "SEDG":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\SEDG_30s.csv",
-    "ARRY":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ARRY_30s.csv",
-    "NXT":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NXT_30s.csv",
-    "ENVX":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ENVX_30s.csv",
-    "MVST":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MVST_30s.csv",
-    "EOSE":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\EOSE_30s.csv",
-    "FLNC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\FLNC_30s.csv",
-    "EVGO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\EVGO_30s.csv",
-    "ITRI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ITRI_30s.csv",
-    "AMSC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AMSC_30s.csv",
-    
-    "POWI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\POWI_30s.csv",
-    "VICR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\VICR_30s.csv",
-    "NVTS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NVTS_30s.csv",
-    "CLNE":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CLNE_30s.csv",
-    
-    "GEVO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GEVO_30s.csv",
-    "MNTK":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MNTK_30s.csv",
-    "ELVA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ELVA_30s.csv",
-    "XEL":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\XEL_30s.csv",
-    "AEP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AEP_30s.csv",
-    "RNW":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\RNW_30s.csv",
-    "INTC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\INTC_30s.csv",
-    "ARQQ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ARQQ_30s.csv",   
-    "MU":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MU_30s.csv",
-    "SMCI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\SMCI_30s.csv",
-    "TRV":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TRV_30s.csv",
-    "PGR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PGR_30s.csv",
-    "BHP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\BHP_30s.csv",
-    "COST":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\COST_30s.csv",
-    "MRK":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MRK_30s.csv",
-    "NFLX":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NFLX_30s.csv",
-    "RMBS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\RMBS_30s.csv",
-    "ALB":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ALB_30s.csv",
-    "VZ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\VZ_30s.csv",
-    "AAPL":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\AAPL_30s.csv",
-    "PG":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PG_30s.csv",
-    "ROP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\ROP_30s.csv",
-    "NKLAQ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NKLAQ_30s.csv",
-    "KO":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KO_30s.csv",
-    "PEP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\PEP_30s.csv",
-    "T":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\T_30s.csv",
-    "TMUS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\TMUS_30s.csv",
-    "CMCSA":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CMCSA_30s.csv",
-    
-    "CCI":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CCI_30s.csv",
-    "KR":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\KR_30s.csv",
-    "MDLZ":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MDLZ_30s.csv",
-    "GIS":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\GIS_30s.csv",
-    "CBP":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\CBP_30s.csv",
-    "MKC":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\MKC_30s.csv",
-    "NOK":r"C:\Users\brobi\OneDrive\Desktop\Algo1\data\NOK_30s.csv"
+
+# --- Universe (de-duplicated, order-preserving, upper-cased) ---
 
 
-}
+
+
+symbols_raw = [
+    "IBM","RGTI","QBTS","QUBT","IONQ","QS","AMD","SLDP","MSFT","CHGG","AI","NVDA","TSM","GOOGL",
+    "PAYO","LCID","PLUG","BYND","TM","SPY","AMC","TDC","INFA","SNOW","PSTG","MDB","FSLR",
+    "ENPH","SEDG","ARRY","NXT","ENVX","MVST","EOSE","FLNC","EVGO","ITRI","AMSC","POWI","VICR",
+    "NVTS","CLNE","GEVO","MNTK","ELVA","XEL","AEP","RNW","INTC","ARQQ","MU","SMCI","TRV","PGR",
+    "BHP","COST","MRK","NFLX","RMBS","ALB","VZ","AAPL","PG","ROP","KO","PEP","T","TMUS","CMCSA",
+    "CCI","KR","MDLZ","GIS","MKC","NOK",
+    "AVGO","ASML","CSCO","AZN","SHOP","APP","LIN","LRCX","QCOM","PDD",
+    "ISRG","INTU","ARM","AMAT","BKNG","KLAC","AMGN","TXN","PANW","ADBE","GILD","CRWD","HON","CEG",
+    "ADI","MELI","ADP","DASH","VRTX","SBUX","CDNS","SNPS","MSTR","ORLY","ABNB","MRVL","CTAS","MAR",
+    "TRI","PYPL","REGN","MNST","CSX","ADSK","FTNT","WDAY","AXON","DDOG","NXPI","ROST","ZS","WBD",
+    "PCAR","IDXX","EA","EXC","FAST","BKR","TTWO","PAYX","TEAM","CPRT","CCEP","FANG","KDP","GEHC",
+    "MCHP","CHTR","CTSH","VRSK","CSGP","KHC","ODFL","DXCM","TTD","BIIB","LULU","ON","CDW","GFS",
+    "ATO","EVRG","WEC","COR","JNJ","TJX","CMS","PPL","DUK"
+]
+symbols = list(OrderedDict.fromkeys(s.strip().upper() for s in symbols_raw))
+
+DATA_DIR = Path(r"C:\Users\brobi\OneDrive\Desktop\Algo1\data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- Build source map (symbol -> Path) ---
+DATA_SOURCES: dict[str, Path] = {}
+missing = []
+
+for sym in symbols:
+    p = DATA_DIR / f"{sym}_30s.csv"   # adjust here if your naming differs
+    if p.exists():
+        DATA_SOURCES[sym] = p
+    else:
+        missing.append(sym)
+
+print(f"✅ with data: {len(DATA_SOURCES)} | ❌ missing: {len(missing)}")
+if missing:
+    print("Missing:", ", ".join(missing[:50]) + (" ..." if len(missing) > 50 else ""))
+
+# Drive downstream loops only from symbols that exist locally:
+DEFAULT_SYMBOLS = tuple(DATA_SOURCES.keys())
+
+def _read_symbols_file(fp: str) -> list[str]:
+    from pathlib import Path
+    p = Path(fp)
+    if not p.exists():
+        raise FileNotFoundError(f"symbols file not found: {p}")
+    raw = [line.split('#', 1)[0].strip() for line in p.read_text().splitlines()]
+    return [s for s in (x.upper() for x in raw) if s]
+
+def resolve_symbols(args=None) -> list[str]:
+    """
+    Precedence: --symbol -> --symbols CSV -> --symbols-file -> what's on disk (DATA_SOURCES).
+    Always intersect with DATA_SOURCES so we never request a ticker without a local CSV.
+    """
+    # Collect requested tickers per precedence
+    if args and getattr(args, "symbol", None):
+        requested = [args.symbol.strip().upper()]
+    elif args and getattr(args, "symbols", None):
+        requested = [s.strip().upper() for s in args.symbols.split(",")]
+    elif args and getattr(args, "symbols_file", None):
+        requested = _read_symbols_file(args.symbols_file)
+    else:
+        requested = list(DATA_SOURCES.keys())  # <— was DEFAULT_SYMBOLS
+
+    # (optional) dedupe while preserving order
+    from collections import OrderedDict
+    requested = list(OrderedDict.fromkeys(requested))
+
+    have = set(DATA_SOURCES.keys())
+    missing_req = [s for s in requested if s not in have]
+    if missing_req:
+        print(f"⚠️  no local data for: {', '.join(missing_req)} (skipping)")
+    resolved = [s for s in requested if s in have]
+    if not resolved:
+        raise RuntimeError("No symbols resolved. Provide tickers via CLI or add data files.")
+    return resolved
+
+# keep your cache dir setup
 DAILY_CACHE_DIR = Path("daily_cache")
-
+DAILY_CACHE_DIR.mkdir(exist_ok=True)
 # =========================
 # RL config
 # =========================
-WINDOW_DAYS = 500
+WINDOW_DAYS = 600
 TURNOVER_PENALTY = 1e-4
 
 BIAS_CHOICES = ["trend","revert"]
@@ -1590,10 +1749,6 @@ def act_train_from_knobs(args):
     Expects a CSV like .\out\per_symbol_knobs.csv with columns:
       symbol, lambda_neg, lambda_dd, reward_clip, regime_penalty, high_atr_q, turnover_penalty
     """
-    import math
-    import numpy as np
-    import pandas as pd
-    from pathlib import Path
 
     knobs_path = Path(getattr(args, "knobs_csv", r".\out\per_symbol_knobs.csv"))
     if not knobs_path.exists():
@@ -2089,14 +2244,25 @@ def act_infer(args):
 
 
 def act_walkforward(args):
+    import torch
     rows = []
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    for sym in DATA_SOURCES.keys():
-        daily = get_daily_df(sym, alpaca_update=args.alpaca_update, since=args.since)
+
+    # use resolved list and step size
+    symbols = list(args.SYMBOLS)
+    step = args.step_days or args.test_days
+
+    for sym in symbols:
+        daily = get_daily_df(sym, alpaca_update=getattr(args, "alpaca_update", False),
+                             since=getattr(args, "since", None))
         assert_backtester_ready(daily)
         N = len(daily)
-        if N <= args.train_days + args.test_days + 60:
-            print(f"skip {sym}: not enough rows for walk-forward"); continue
+
+        min_rows = args.train_days + args.test_days + 60
+        if N <= min_rows:
+            print(f"skip {sym}: not enough rows for walk-forward (have {N}, need > {min_rows})")
+            continue
+
         start = args.train_days
         while start + args.test_days < N:
             train_i0 = start - args.train_days
@@ -2104,33 +2270,56 @@ def act_walkforward(args):
             test_i0  = start
             test_iN  = start + args.test_days - 1
 
+            # 1y YoY estimate (clipped) to condition env (trend/revert bias, etc.)
             pre = daily.iloc[:train_i0]
             if len(pre) >= bt.TRADING_DAYS:
-                yoy = float(np.clip(pre[bt.PRICE_COL].iloc[-1]/pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS] - 1.0, -0.5, 0.5))
+                yoy = float(np.clip(
+                    pre[bt.PRICE_COL].iloc[-1] / pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS] - 1.0,
+                    -0.5, 0.5
+                ))
             else:
                 yoy = 0.05
-            weights = {"SMA_1Y":0.50,"SMA_1M":0.30,"SMA_1W":0.15,"SMA_1D":0.05}
+
+            # same weights you had for the buffer/mid/upper math
+            weights = {"SMA_1Y": 0.50, "SMA_1M": 0.30, "SMA_1W": 0.15, "SMA_1D": 0.05}
+
             env_train = TradingEnv(daily, train_i0, train_iN, weights, yoy, True, True, True); env_train.label = sym
-            env_test  = TradingEnv(daily, test_i0,  test_iN,  weights, yoy, True, True, True); env_test.label  = sym
+            env_test  = TradingEnv(daily, test_i0,  test_iN,  weights, yoy, True, True, True);  env_test.label  = sym
 
             model_path = Path(args.model)
-            train_dqn([env_train], episodes=args.episodes, gamma=0.99, lr=3e-4, batch=256,
-                      eps_start=1.0, eps_end=0.05, eps_decay=0.995, target_sync=500,
-                      update_after=args.update_after, updates_per_step=1, device=device, seed=123,
-                      save_path=str(model_path))
+            train_dqn(
+                [env_train],
+                episodes=args.episodes, gamma=0.99, lr=3e-4, batch=256,
+                eps_start=1.0, eps_end=0.05, eps_decay=0.995, target_sync=500,
+                update_after=args.update_after, updates_per_step=1,
+                device=device, seed=123, save_path=str(model_path)
+            )
 
             q = load_policy(str(model_path), device=device)
             curve = rollout_greedy(env_test, q)
             metrics = score_equity(curve)
-            rows.append({"symbol": sym,
-                         "train_idx": f"{train_i0}-{train_iN}",
-                         "test_idx": f"{test_i0}-{test_iN}",
-                         **metrics})
-            print(f"[WF] {sym} {train_i0}-{train_iN} -> {test_i0}-{test_iN} | Sharpe={metrics['sharpe']:.2f} CAGR={metrics['cagr']:.2%}")
-            start = test_iN + 1
+
+            rows.append({
+                "symbol": sym,
+                "train_idx": f"{train_i0}-{train_iN}",
+                "test_idx":  f"{test_i0}-{test_iN}",
+                **metrics
+            })
+            print(f"[WF] {sym} {train_i0}-{train_iN} -> {test_i0}-{test_iN} | "
+                  f"Sharpe={metrics.get('sharpe', float('nan')):.2f} "
+                  f"CAGR={metrics.get('cagr', float('nan')):.2%}")
+
+            # advance by step (not necessarily the full test window)
+            start += step
+
     df = pd.DataFrame(rows)
     if not df.empty:
-        out = Path("wf_results.csv"); df.to_csv(out, index=False); print(f"Wrote {out.resolve()}")
+        outdir = args.paths["logs_dir"] / "out"
+        outdir.mkdir(parents=True, exist_ok=True)
+        out = outdir / "wf_results.csv"
+        df.to_csv(out, index=False)
+        print(f"Wrote {out.resolve()}")
+
 
 # --- Walk-forward leaderboard (tag-aware, experiment-isolated, robust metrics) ---
 def act_walkleader(args):
@@ -2452,23 +2641,32 @@ def act_walkleader(args):
 
 # --- Fallback equity scorer (if project score_equity is missing) --------------
 def _score_equity_fallback(equity_curve):
+    import numpy as np
     try:
         s = np.asarray(list(equity_curve), dtype=float)
         if len(s) < 2 or not np.isfinite(s).all():
-            return {"cagr": 0.0, "sharpe": 0.0, "maxdd": 0.0, "calmar": 0.0}
+            return {"cagr": 0.0, "sharpe": 0.0, "max_dd": 0.0, "maxdd": 0.0, "calmar": 0.0, "final_equity": float(s[-1]) if len(s) else 0.0}
         rets = np.diff(s) / np.clip(s[:-1], 1e-12, None)
-        mu = float(np.nanmean(rets)) * np.sqrt(252.0)
-        sd = float(np.nanstd(rets, ddof=1))
-        sharpe = (mu / (sd + 1e-12)) if np.isfinite(sd) and sd > 0 else 0.0
+        mu_d = float(np.nanmean(rets))
+        sd_d = float(np.nanstd(rets, ddof=1))
+        sharpe = (mu_d / (sd_d + 1e-12)) * np.sqrt(252.0) if np.isfinite(sd_d) and sd_d > 0 else 0.0
         cagr = (float(s[-1]) / float(s[0])) ** (252.0 / max(1.0, len(s))) - 1.0 if s[0] > 0 else 0.0
         peak = np.maximum.accumulate(s)
         dd = s / np.clip(peak, 1e-12, None) - 1.0
-        maxdd = float(np.nanmin(dd))
-        calmar = (cagr / abs(maxdd)) if maxdd < 0 else float("inf")
-        if not np.isfinite(calmar): calmar = 0.0
-        return {"cagr": float(cagr), "sharpe": float(sharpe), "maxdd": float(maxdd), "calmar": float(calmar)}
+        maxdd = float(np.nanmin(dd))  # negative number or 0
+        calmar = (cagr / abs(maxdd)) if maxdd < 0 else 0.0
+        if not np.isfinite(calmar):
+            calmar = 0.0
+        return {
+            "cagr": float(cagr),
+            "sharpe": float(sharpe),
+            "max_dd": float(maxdd),   # preferred name
+            "maxdd": float(maxdd),    # alias for defensive code elsewhere
+            "calmar": float(calmar),
+            "final_equity": float(s[-1]),
+        }
     except Exception:
-        return {"cagr": 0.0, "sharpe": 0.0, "maxdd": 0.0, "calmar": 0.0}
+        return {"cagr": 0.0, "sharpe": 0.0, "max_dd": 0.0, "maxdd": 0.0, "calmar": 0.0, "final_equity": 0.0}
 
 
 def act_splityear(args):
@@ -2480,46 +2678,92 @@ def act_splityear(args):
         if not p.exists():
             return {}
         df = _pd.read_csv(p)
-        needed = {"symbol","lambda_neg","lambda_dd","reward_clip","regime_penalty","high_atr_q","turnover_penalty"}
-        missing = needed - set(c.lower() for c in df.columns)
-        # tolerant to slight column-case differences
         df.columns = [c.lower() for c in df.columns]
-        if {"symbol"} - set(df.columns):
-            return {}
-        # coerce numeric if present
         for c in ["lambda_neg","lambda_dd","reward_clip","regime_penalty","high_atr_q","turnover_penalty"]:
             if c in df.columns:
                 df[c] = _pd.to_numeric(df[c], errors="coerce")
         out = {}
-        for _, r in df.iterrows():
-            k = r["symbol"].strip().upper()
-            out[k] = {k2: r.get(k2, None) for k2 in ["lambda_neg","lambda_dd","reward_clip","regime_penalty","high_atr_q","turnover_penalty"]}
+        if "symbol" in df.columns:
+            for _, r in df.iterrows():
+                k = str(r["symbol"]).strip().upper()
+                out[k] = {k2: r.get(k2, None) for k2 in ["lambda_neg","lambda_dd","reward_clip","regime_penalty","high_atr_q","turnover_penalty"]}
         return out
+
+    # --- local metric normalizer (uses project helper if present) ---
+    def _coerce_metrics(curve_like, raw):
+        import numpy as _np, pandas as _pd
+        try:
+            # Prefer project-wide helper if available
+            return _coerce_metrics(curve_like, raw)  # type: ignore[func-returns-value]
+        except Exception:
+            pass
+        # Fallback: compute what we need from a series-like
+        if isinstance(curve_like, _pd.DataFrame) and "equity" in curve_like:
+            s = _np.asarray(curve_like["equity"].values, dtype=float)
+        elif hasattr(curve_like, "values"):
+            s = _np.asarray(curve_like.values, dtype=float)
+        else:
+            s = _np.asarray(curve_like, dtype=float)
+        fb = _score_equity_fallback(s)
+        # merge any valid keys present in raw
+        out = dict(fb)
+        if isinstance(raw, dict):
+            for k in ("cagr","sharpe","max_dd","maxdd","calmar","final_equity"):
+                if k in raw and _np.isfinite(raw[k]):
+                    out[k] = float(raw[k])
+        # ensure aliases consistent
+        out["maxdd"] = float(out.get("maxdd", out.get("max_dd", 0.0)))
+        out["max_dd"] = float(out.get("max_dd", out.get("maxdd", 0.0)))
+        return out
+
+    import numpy as np, pandas as pd, torch
+    from pathlib import Path
+    import matplotlib.pyplot as plt
 
     per_knobs = _load_knobs()
     base_env_kwargs = env_kwargs_from_args(args)
 
+    # Resolve window days safely
+    try:
+        year_days = int(getattr(bt, "WINDOW_DAYS", 252))
+    except Exception:
+        year_days = 252
+
     oos_days = int(args.oos_days)
-    year_days = WINDOW_DAYS
     train_days = year_days - oos_days
     assert train_days > 60, "Need enough train days (>60)."
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     rows = []
-    models_dir = Path("models"); models_dir.mkdir(parents=True, exist_ok=True)
 
-    # If future CLI adds --symbols, respect it; otherwise use DATA_SOURCES
-    chosen_syms = []
-    if hasattr(args, "symbols") and args.symbols:
-        chosen_syms = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-    if not chosen_syms:
-        chosen_syms = list(DATA_SOURCES.keys())
+    models_dir = args.paths["models_dir"]; models_dir.mkdir(parents=True, exist_ok=True)
+    outdir = args.paths["logs_dir"] / "out"; outdir.mkdir(parents=True, exist_ok=True)
+    summary_path = outdir / "splityear_summary.csv"
 
-    for sym in chosen_syms:
+    # Symbols (use resolved list if present)
+    symbols = list(getattr(args, "SYMBOLS", DATA_SOURCES.keys()))
+
+    # price col / constants
+    PXC = getattr(bt, "PRICE_COL", "close")
+
+    # If a project helper exists, we’ll use it, else fallback to Buy&Hold
+    def _rule_baseline_by_idx(sym, daily, i0, iN, tag):
+        fn = globals().get("run_rule_baseline_by_idx", None)
+        if callable(fn):
+            return fn(sym, daily, i0, iN, tag)
+        # Fallback BH
+        px = daily.loc[i0:iN, PXC].astype(float).to_numpy()
+        dates = pd.to_datetime(daily.loc[i0:iN, "date"]) if "date" in daily.columns else pd.RangeIndex(iN - i0 + 1)
+        shares = 1.0 / max(px[0], 1e-12)
+        eq = shares * px
+        curve = pd.DataFrame({"date": dates, "equity": eq})
+        return curve, {"bh_final": float(eq[-1])}
+
+    for sym in symbols:
         if sym not in DATA_SOURCES:
             print(f"skip {sym}: not in DATA_SOURCES"); continue
 
-        daily = get_daily_df(sym, alpaca_update=args.alpaca_update, since=args.since)
+        daily = get_daily_df(sym, alpaca_update=getattr(args, "alpaca_update", False), since=getattr(args, "since", None))
         assert_backtester_ready(daily)
         N = len(daily)
         if N <= year_days + 60:
@@ -2533,8 +2777,8 @@ def act_splityear(args):
         oos_iN   = year_iN
 
         pre = daily.iloc[:train_i0]
-        if len(pre) >= bt.TRADING_DAYS:
-            yoy = float(np.clip(pre[bt.PRICE_COL].iloc[-1] / pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS] - 1.0, -0.5, 0.5))
+        if len(pre) >= getattr(bt, "TRADING_DAYS", 252):
+            yoy = float(np.clip(pre[PXC].iloc[-1] / max(1e-12, pre[PXC].iloc[-getattr(bt, "TRADING_DAYS", 252)]) - 1.0, -0.5, 0.5))
         else:
             yoy = 0.05
 
@@ -2542,7 +2786,7 @@ def act_splityear(args):
         env_train = TradingEnv(daily, train_i0, train_iN, weights, yoy, True, True, True); env_train.label = sym
         env_oos   = TradingEnv(daily, oos_i0,   oos_iN,   weights, yoy, True, True, True);   env_oos.label   = sym
 
-        # -------- apply reward-shaping (CLI defaults overridden by per-symbol knobs if available) --------
+        # apply reward-shaping: CLI defaults overridden by per-symbol knobs if available
         sym_over = per_knobs.get(sym, {})
         env_kw   = {**base_env_kwargs, **{k:v for k,v in sym_over.items() if v is not None}}
         apply_env_shaping_inplace(env_train, **env_kw)
@@ -2554,7 +2798,7 @@ def act_splityear(args):
               f"atrQ={env_kw.get('high_atr_q')} turn={env_kw.get('turnover_penalty')}")
 
         model_path = models_dir / f"{args.model_prefix}_{sym}.pt"
-        train_dqn([env_train], episodes=args.episodes, gamma=0.99, lr=3e-4, batch=256,
+        train_dqn([env_train], episodes=int(args.episodes), gamma=0.99, lr=3e-4, batch=256,
                   eps_start=1.0, eps_end=0.05, eps_decay=0.995, target_sync=500,
                   update_after=1000, updates_per_step=1, device=device, seed=123,
                   save_path=str(model_path))
@@ -2563,23 +2807,44 @@ def act_splityear(args):
         curve_rl_train = rollout_greedy(env_train, q)
         curve_rl_oos   = rollout_greedy(env_oos, q)
 
-        eq_rule_train, summ_tr = run_rule_baseline_by_idx(sym, daily, train_i0, train_iN, "train")
-        eq_rule_oos,   summ_ts = run_rule_baseline_by_idx(sym, daily, oos_i0,   oos_iN,   "oos")
+        eq_rule_train, summ_tr = _rule_baseline_by_idx(sym, daily, train_i0, train_iN, "train")
+        eq_rule_oos,   summ_ts = _rule_baseline_by_idx(sym, daily, oos_i0,   oos_iN,   "oos")
 
-        m_rl_tr  = score_equity(curve_rl_train); m_rl_ts  = score_equity(curve_rl_oos)
-        m_rb_tr  = score_equity(eq_rule_train);  m_rb_ts  = score_equity(eq_rule_oos)
+        m_rl_tr  = _coerce_metrics(curve_rl_train, score_equity(curve_rl_train) if 'score_equity' in globals() else {})
+        m_rl_ts  = _coerce_metrics(curve_rl_oos,   score_equity(curve_rl_oos)   if 'score_equity' in globals() else {})
+        m_rb_tr  = _coerce_metrics(eq_rule_train,  score_equity(eq_rule_train)  if 'score_equity' in globals() else {})
+        m_rb_ts  = _coerce_metrics(eq_rule_oos,    score_equity(eq_rule_oos)    if 'score_equity' in globals() else {})
 
-        print_side_by_side_console(sym, m_rl_tr, m_rb_tr, m_rl_ts, m_rb_ts, summ_tr, summ_ts)
+        # Console compare (tolerant)
+        def _to(v): 
+            try: return float(v)
+            except: return 0.0
+        print(f"[{sym}] TRAIN  RL S={_to(m_rl_tr['sharpe']):.2f} CAGR={_to(m_rl_tr['cagr']):.2%}  | "
+              f"RULE S={_to(m_rb_tr['sharpe']):.2f} CAGR={_to(m_rb_tr['cagr']):.2%}")
+        print(f"[{sym}] OOS    RL S={_to(m_rl_ts['sharpe']):.2f} CAGR={_to(m_rl_ts['cagr']):.2%}  | "
+              f"RULE S={_to(m_rb_ts['sharpe']):.2f} CAGR={_to(m_rb_ts['cagr']):.2%}")
 
         rows.append({
             "symbol": sym,
             "train_days": train_days, "oos_days": oos_days,
-            "rl_train_final": m_rl_tr["final_equity"], "rl_train_sharpe": m_rl_tr["sharpe"], "rl_train_cagr": m_rl_tr["cagr"], "rl_train_maxdd": m_rl_tr["max_dd"],
-            "rl_oos_final":   m_rl_ts["final_equity"], "rl_oos_sharpe":   m_rl_ts["sharpe"], "rl_oos_cagr":   m_rl_ts["cagr"], "rl_oos_maxdd":   m_rl_ts["max_dd"],
-            "rule_train_final": m_rb_tr["final_equity"], "rule_train_sharpe": m_rb_tr["sharpe"], "rule_train_cagr": m_rb_tr["cagr"], "rule_train_maxdd": m_rb_tr["max_dd"],
-            "rule_oos_final":   m_rb_ts["final_equity"], "rule_oos_sharpe":   m_rb_ts["sharpe"], "rule_oos_cagr":   m_rb_ts["cagr"], "rule_oos_maxdd":   m_rb_ts["max_dd"],
-            "rule_train_bh_return_pct_100": _bh_pct_vs_100(summ_tr),
-            "rule_oos_bh_return_pct_100":   _bh_pct_vs_100(summ_ts),
+            "rl_train_final": m_rl_tr.get("final_equity", 0.0),
+            "rl_train_sharpe": m_rl_tr.get("sharpe", 0.0),
+            "rl_train_cagr": m_rl_tr.get("cagr", 0.0),
+            "rl_train_maxdd": m_rl_tr.get("max_dd", m_rl_tr.get("maxdd", 0.0)),
+            "rl_oos_final":   m_rl_ts.get("final_equity", 0.0),
+            "rl_oos_sharpe":  m_rl_ts.get("sharpe", 0.0),
+            "rl_oos_cagr":    m_rl_ts.get("cagr", 0.0),
+            "rl_oos_maxdd":   m_rl_ts.get("max_dd", m_rl_ts.get("maxdd", 0.0)),
+            "rule_train_final": m_rb_tr.get("final_equity", 0.0),
+            "rule_train_sharpe": m_rb_tr.get("sharpe", 0.0),
+            "rule_train_cagr":   m_rb_tr.get("cagr", 0.0),
+            "rule_train_maxdd":  m_rb_tr.get("max_dd", m_rb_tr.get("maxdd", 0.0)),
+            "rule_oos_final":    m_rb_ts.get("final_equity", 0.0),
+            "rule_oos_sharpe":   m_rb_ts.get("sharpe", 0.0),
+            "rule_oos_cagr":     m_rb_ts.get("cagr", 0.0),
+            "rule_oos_maxdd":    m_rb_ts.get("max_dd", m_rb_ts.get("maxdd", 0.0)),
+            "rule_train_bh_return_pct_100": _bh_pct_vs_100(summ_tr) if 'summ_tr' in locals() else np.nan,
+            "rule_oos_bh_return_pct_100":   _bh_pct_vs_100(summ_ts) if 'summ_ts' in locals() else np.nan,
             "model_path": str(model_path),
             # record shaping actually used
             "p_lambda_neg": env_kw.get("lambda_neg"),
@@ -2590,12 +2855,12 @@ def act_splityear(args):
             "p_turnover_penalty": env_kw.get("turnover_penalty"),
         })
 
-        # Save plots
+        # Save plots (into logs/out)
         def _save_curve_png(curve, label):
             fig, ax = plt.subplots(figsize=(10,5))
             ax.plot(pd.to_datetime(curve["date"]), curve["equity"], label=label)
             ax.set_title(f"{sym} — {label}"); ax.set_ylabel("Equity ($)"); ax.legend(); fig.tight_layout()
-            out = Path(f"{label.lower().replace(' ','_')}_{sym}.png")
+            out = outdir / f"{label.lower().replace(' ','_')}_{sym}.png"
             fig.savefig(out, dpi=150); plt.close(fig); print(f"Saved {out.resolve()}")
 
         _save_curve_png(curve_rl_train, "RL Train (greedy)")
@@ -2606,7 +2871,7 @@ def act_splityear(args):
             ax.plot(pd.to_datetime(curve_rule["date"]), curve_rule["equity"], label="Rule")
             ax.plot(pd.to_datetime(curve_rl["date"]),   curve_rl["equity"],   label="RL")
             ax.set_title(f"{sym} — {label}"); ax.set_ylabel("Equity ($)"); ax.legend(); fig.tight_layout()
-            out = Path(f"compare_{sym}_{label.replace(' ','_').lower()}.png")
+            out = outdir / f"compare_{sym}_{label.replace(' ','_').lower()}.png"
             fig.savefig(out, dpi=150); plt.close(fig); print(f"Saved {out.resolve()}")
 
         _save_compare(curve_rl_train, eq_rule_train, "Train")
@@ -2614,11 +2879,10 @@ def act_splityear(args):
 
     df = pd.DataFrame(rows)
     if not df.empty:
-        out = Path("splityear_summary.csv")
-        df.to_csv(out, index=False)
+        df.to_csv(summary_path, index=False)
         print("\n=== SPLIT-YEAR SUMMARY ===")
         print(df.to_string(index=False))
-        print(f"\nWrote {out.resolve()}")
+        print(f"\nWrote {summary_path.resolve()}")
     else:
         print("No symbols processed.")
 
@@ -2638,34 +2902,56 @@ def act_splityear_pooled(args):
         out = {}
         if "symbol" in df.columns:
             for _, r in df.iterrows():
-                k = r["symbol"].strip().upper()
+                k = str(r["symbol"]).strip().upper()
                 out[k] = {k2: r.get(k2, None) for k2 in ["lambda_neg","lambda_dd","reward_clip","regime_penalty","high_atr_q","turnover_penalty"]}
         return out
+
+    import numpy as np, pandas as pd, torch
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+
+    # local normalizer
+    def _norm_metrics(curve_like):
+        try:
+            m = score_equity(curve_like)
+            # harmonize names
+            m["max_dd"] = m.get("max_dd", m.get("maxdd", 0.0))
+            m["final_equity"] = m.get("final_equity", float(curve_like["equity"].iloc[-1]) if isinstance(curve_like, pd.DataFrame) and "equity" in curve_like else 0.0)
+            return m
+        except Exception:
+            return _score_equity_fallback(curve_like["equity"] if isinstance(curve_like, pd.DataFrame) else curve_like)
 
     per_knobs = _load_knobs()
     base_env_kwargs = env_kwargs_from_args(args)
 
-    if args.symbols:
-        chosen = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-    else:
-        chosen = list(DATA_SOURCES.keys())
+    # resolved symbols
+    symbols = list(getattr(args, "SYMBOLS", DATA_SOURCES.keys()))
+
+    # constants
+    try:
+        WINDOW_DAYS_ = int(getattr(bt, "WINDOW_DAYS", 252))
+        PXC = getattr(bt, "PRICE_COL", "close")
+    except Exception:
+        WINDOW_DAYS_, PXC = 252, "close"
 
     per = {}
-    for sym in chosen:
+    for sym in symbols:
         if sym not in DATA_SOURCES:
             print(f"skip {sym}: not in DATA_SOURCES"); continue
-        daily = get_daily_df(sym, alpaca_update=args.alpaca_update, since=args.since)
+        daily = get_daily_df(sym, alpaca_update=getattr(args, "alpaca_update", False), since=getattr(args, "since", None))
         assert_backtester_ready(daily)
-        if len(daily) <= WINDOW_DAYS + 60:
+        if len(daily) <= WINDOW_DAYS_ + 60:
             print(f"skip {sym}: insufficient history"); continue
         N  = len(daily)
-        y0 = N - WINDOW_DAYS; yN = N - 1
-        trN = yN - args.oos_days
-        if trN <= y0: print(f"skip {sym}: OOS too large"); continue
+        y0 = N - WINDOW_DAYS_; yN = N - 1
+        trN = yN - int(args.oos_days)
+        if trN <= y0: 
+            print(f"skip {sym}: OOS too large"); 
+            continue
         o0 = trN + 1; oN = yN
         pre = daily.iloc[:y0]
-        if len(pre) >= bt.TRADING_DAYS:
-            yoy = float(np.clip(pre[bt.PRICE_COL].iloc[-1] / pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS] - 1.0, -0.5, 0.5))
+        if len(pre) >= getattr(bt, "TRADING_DAYS", 252):
+            yoy = float(np.clip(pre[PXC].iloc[-1] / max(1e-12, pre[PXC].iloc[-getattr(bt, "TRADING_DAYS", 252)]) - 1.0, -0.5, 0.5))
         else:
             yoy = 0.05
         weights = {"SMA_1Y":0.50,"SMA_1M":0.30,"SMA_1W":0.15,"SMA_1D":0.05}
@@ -2686,11 +2972,13 @@ def act_splityear_pooled(args):
     if not per:
         raise SystemExit("No symbols available for pooled run.")
 
-    envs = [per[sym]["env_train"] for sym in per.keys()]
+    # train pooled model
+    envs = [info["env_train"] for info in per.values()]
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    models_dir = Path("models"); models_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = args.paths["models_dir"]; models_dir.mkdir(parents=True, exist_ok=True)
+    outdir = args.paths["logs_dir"] / "out"; outdir.mkdir(parents=True, exist_ok=True)
     model_path = models_dir / f"{args.model_prefix}_POOLED.pt"
-    train_dqn(envs, episodes=args.episodes, gamma=0.99, lr=3e-4, batch=256,
+    train_dqn(envs, episodes=int(args.episodes), gamma=0.99, lr=3e-4, batch=256,
               eps_start=1.0, eps_end=0.05, eps_decay=0.995, target_sync=500,
               update_after=1000, updates_per_step=1, device=device, seed=123,
               save_path=str(model_path))
@@ -2712,13 +3000,14 @@ def act_splityear_pooled(args):
     all_dates = list(all_idx.sort_values())
 
     # Initial holdings
-    cash = float(args.start_cash_extra)
+    cash = float(getattr(args, "start_cash_extra", 0.0) or 0.0)
     shares = {sym: 0.0 for sym in per.keys()}
     for sym, df in sym_dates.items():
-        if df.empty: continue
+        if df.empty: 
+            continue
         first_date = df.index[0]
-        px = float(df.loc[first_date, bt.PRICE_COL])
-        invest = float(args.invest_per_symbol)
+        px = float(df.loc[first_date, PXC])
+        invest = float(getattr(args, "invest_per_symbol", 100.0))
         exec_px = px * (1.0 + bt.SLIPPAGE_PCT)
         qty = max(0.0, (invest - bt.FEE_FIXED) / (exec_px * (1.0 + bt.FEE_PCT)))
         cost = qty * exec_px
@@ -2726,26 +3015,31 @@ def act_splityear_pooled(args):
         cash -= (cost + fees)
         shares[sym] += qty
 
+    # Momentum rank helper
     def mom_rank_for_date(date_):
         vals = []
         for sym, df in sym_dates.items():
-            if date_ not in df.index: continue
+            if date_ not in df.index: 
+                continue
             i = df.index.get_loc(date_)
-            if isinstance(i, slice): continue
-            start_i = i - args.mom_window
-            if start_i < 0: continue
-            px_now = float(df.iloc[i][bt.PRICE_COL])
-            px_prev = float(df.iloc[start_i][bt.PRICE_COL])
+            if isinstance(i, slice): 
+                continue
+            start_i = i - int(args.mom_window)
+            if start_i < 0: 
+                continue
+            px_now = float(df.iloc[i][PXC])
+            px_prev = float(df.iloc[start_i][PXC])
             if px_prev > 0:
                 vals.append((sym, (px_now / px_prev) - 1.0))
-        if not vals: return {}
+        if not vals: 
+            return {}
         vals.sort(key=lambda x: x[1])  # ascending
         ranks = {sym: rank for rank, (sym, _) in enumerate(vals)}
         n = len(vals)
         scaled = {}
         for sym, _ret in vals:
             r = ranks[sym] / max(1, n-1)
-            scaled[sym] = linear_scale(r, args.mom_scale_low, args.mom_scale_high)
+            scaled[sym] = linear_scale(r, float(args.mom_scale_low), float(args.mom_scale_high))
         return scaled
 
     equity_rows = []
@@ -2758,11 +3052,10 @@ def act_splityear_pooled(args):
         for sym, scale in todays:
             row = sym_dates[sym].loc[date_]
             base_mid = bt.composite_from_weights(row, per[sym]["weights"])
-            if not np.isfinite(base_mid): base_mid = float(row[bt.PRICE_COL])
+            if not np.isfinite(base_mid): 
+                base_mid = float(row[PXC])
 
-            # Use compat wrapper for trend projection (for obs & for band calc)
             mid = trend_project_compat(bt, base_mid, per[sym]["yoy"], apply_trend=True)
-
             vol = float(row["vol_21"])
             buf = bt.per_day_buffer(vol, 1.0, 0.010, 0.03)
             obs = make_observation(row, mid, buf, per[sym]["yoy"])
@@ -2777,7 +3070,7 @@ def act_splityear_pooled(args):
             mid_s = trend_project_compat(bt, base_mid, per[sym]["yoy"], apply_trend=True)
             buf_s = bt.per_day_buffer(vol, 1.0 * buf_scale, 0.010, 0.03)
             upper = mid_s * (1.0 + buf_s); lower = mid_s * (1.0 - buf_s)
-            px = float(row[bt.PRICE_COL])
+            px = float(row[PXC])
 
             pre_sig = 1 if (bias=="trend" and px>upper) or (bias=="revert" and px<lower) else (0 if (bias=="trend" and px<lower) or (bias=="revert" and px>upper) else -1)
             if pre_sig == 1 and bool(row.get("bear_state", False)) and bias=="trend":
@@ -2824,14 +3117,15 @@ def act_splityear_pooled(args):
         eq = cash
         for sym, df in sym_dates.items():
             if date_ in df.index:
-                px = float(df.loc[date_, bt.PRICE_COL])
+                px = float(df.loc[date_, PXC])
                 eq += shares[sym] * px
         equity_rows.append({"date": date_, "equity": eq, "cash": cash, **{f"sh_{s}": shares[s] for s in shares}})
 
     eq_df = pd.DataFrame(equity_rows).sort_values("date")
     tr_df = pd.DataFrame(trades).sort_values("date")
 
-    eq_out = Path("pooled_equity.csv"); tr_out = Path("pooled_trades.csv")
+    eq_out = outdir / "pooled_equity.csv"
+    tr_out = outdir / "pooled_trades.csv"
     eq_df.to_csv(eq_out, index=False); tr_df.to_csv(tr_out, index=False)
     print(f"Wrote {eq_out.resolve()} and {tr_out.resolve()}")
 
@@ -2839,11 +3133,11 @@ def act_splityear_pooled(args):
     ax.plot(pd.to_datetime(eq_df["date"]), eq_df["equity"], label="RL pooled (OOS)")
     ax.set_title(f"Pooled OOS equity — {', '.join(per.keys())}")
     ax.set_ylabel("Equity ($)"); ax.legend(); fig.tight_layout()
-    png = Path("pooled_equity.png"); fig.savefig(png, dpi=150); plt.close(fig)
+    png = outdir / "pooled_equity.png"; fig.savefig(png, dpi=150); plt.close(fig)
     print(f"Saved {png.resolve()}")
 
-    m = score_equity(eq_df)
-    print(f"POOLED — final=${m['final_equity']:.2f}  Sharpe={m['sharpe']:.2f}  CAGR={m['cagr']:.2%}  MaxDD={m['max_dd']:.2%}")
+    m = _norm_metrics(eq_df)
+    print(f"POOLED — final=${m.get('final_equity', 0.0):.2f}  Sharpe={m.get('sharpe', 0.0):.2f}  CAGR={m.get('cagr', 0.0):.2%}  MaxDD={m.get('max_dd', 0.0):.2%}")
 
 # ---------- Tiny wrapper so we can call .greedy_action(obs) ----------
 class RLPolicy:
@@ -3355,6 +3649,23 @@ def _add_parser_once(sub, name, help_text):
     _add_parser_once._added.add(name)
     return p
 
+def add_symbol_args(p, allow_file: bool = True):
+    p.add_argument("--symbols", type=str, default="", help="Comma-separated tickers (default: all with local data)")
+    if allow_file:
+        p.add_argument("--symbols-file", type=str, default=None, help="Path to newline-delimited tickers")
+
+# === Training hyperparams (exploration / schedule) ===
+def add_train_hparams(ap):
+    ap.add_argument("--eps-start", type=float, default=1.0)
+    ap.add_argument("--eps-end",   type=float, default=0.05)
+    ap.add_argument("--eps-decay", type=float, default=0.995)
+    ap.add_argument("--update-after", type=int, default=1000)
+    ap.add_argument("--updates-per-step", type=int, default=1)
+    ap.add_argument("--target-sync", type=int, default=500)
+    ap.add_argument("--batch", type=int, default=256)
+    ap.add_argument("--gamma", type=float, default=0.99)
+    ap.add_argument("--lr",    type=float, default=3e-4)
+
 
 # === Reward shaping CLI + env wiring helpers (added) ==========================
 
@@ -3399,30 +3710,6 @@ def apply_env_shaping_inplace(env, **kw):
 
 # === End helpers ===============================================================
 
-
-# --- Fallback equity scorer (robust to NaNs/short curves) ---
-def _score_equity_fallback(equity_curve):
-    import numpy as _np
-    try:
-        if hasattr(equity_curve, "values"):
-            s = np.asarray(list(equity_curve.values), dtype=float)
-        else:
-            s = np.asarray(list(equity_curve), dtype=float)
-        if len(s) < 2 or not np.isfinite(s).all():
-            return {"cagr": 0.0, "sharpe": 0.0, "maxdd": 0.0, "calmar": 0.0}
-        rets = np.diff(s) / np.clip(s[:-1], 1e-12, None)
-        mu = float(np.nanmean(rets)) * 252.0
-        sd = float(np.nanstd(rets, ddof=1))
-        sharpe = (mu / (sd + 1e-12)) if np.isfinite(sd) and sd > 0 else 0.0
-        cagr = (float(s[-1]) / float(s[0])) ** (252.0 / max(1.0, len(s))) - 1.0 if s[0] > 0 else 0.0
-        peak = np.maximum.accumulate(s)
-        dd = s / np.clip(peak, 1e-12, None) - 1.0
-        maxdd = float(np.nanmin(dd))
-        calmar = (cagr / abs(maxdd)) if maxdd < 0 else 0.0
-        if not np.isfinite(calmar): calmar = 0.0
-        return {"cagr": float(cagr), "sharpe": float(sharpe), "maxdd": float(maxdd), "calmar": float(calmar)}
-    except Exception:
-        return {"cagr": 0.0, "sharpe": 0.0, "maxdd": 0.0, "calmar": 0.0}
 
 # --- Normalize metrics dict from score_equity variants ---
 def _coerce_metrics(curve, m):
@@ -3558,6 +3845,7 @@ def main():
         ap_train.add_argument("--episodes", type=int, default=250)
         ap_train.add_argument("--model", type=str, default="models/dqn_policy_1y.pt")
         add_reward_shaping_args(ap_train)
+        add_train_hparams(ap_train)  # <-- wired
         ap_train.set_defaults(func=act_train)
 
     ap_eval = _add_parser_once(sub, "eval", "Evaluate saved model and plot RL equity")
@@ -3580,11 +3868,12 @@ def main():
         ap_wf.add_argument("--train-days", type=int, default=252*2)
         ap_wf.add_argument("--test-days", type=int, default=21)
         ap_wf.add_argument("--episodes", type=int, default=100)
-        ap_wf.add_argument("--update-after", type=int, default=800)
+        # REMOVED: ap_wf.add_argument("--update-after", type=int, default=800)
         ap_wf.add_argument("--model", type=str, default="models/dqn_wf.pt")
-        ap_wf.add_argument("--symbols", type=str, default=None, help="Comma-separated tickers; default = all")
+        add_symbol_args(ap_wf)
         ap_wf.add_argument("--step-days", type=int, default=None, help="Advance per roll; default = --test-days")
         add_reward_shaping_args(ap_wf)
+        add_train_hparams(ap_wf)  # <-- wired
         ap_wf.set_defaults(func=act_walkforward)
 
     ap_exp = _add_parser_once(sub, "export-actions", "Export greedy action log to CSV for a symbol")
@@ -3611,16 +3900,18 @@ def main():
     ap_sy = _add_parser_once(sub, "splityear", "Per symbol: train on last 1y minus OOS, eval on reserved OOS")
     if ap_sy:
         add_common(ap_sy)
+        add_symbol_args(ap_sy)  # <-- add this line
         ap_sy.add_argument("--oos-days", type=int, default=42)
         ap_sy.add_argument("--episodes", type=int, default=200)
         ap_sy.add_argument("--model-prefix", type=str, default="dqn_splityear")
         add_reward_shaping_args(ap_sy)
+        add_train_hparams(ap_sy)  # <-- wired
         ap_sy.set_defaults(func=act_splityear)
 
     ap_pool = _add_parser_once(sub, "splityear-pooled", "Pooled cash with momentum sizing over OOS")
     if ap_pool:
         add_common(ap_pool)
-        ap_pool.add_argument("--symbols", type=str, default="", help="Comma-separated tickers (default: all in DATA_SOURCES)")
+        add_symbol_args(ap_pool)
         ap_pool.add_argument("--oos-days", type=int, default=42)
         ap_pool.add_argument("--episodes", type=int, default=200)
         ap_pool.add_argument("--model-prefix", type=str, default="dqn_sy")
@@ -3630,13 +3921,14 @@ def main():
         ap_pool.add_argument("--mom-scale-low", type=float, default=0.8)
         ap_pool.add_argument("--mom-scale-high", type=float, default=1.3)
         add_reward_shaping_args(ap_pool)
+        add_train_hparams(ap_pool)  # <-- wired
         ap_pool.set_defaults(func=act_splityear_pooled)
 
     # --- LIVE (3pm ET) ---
     ap_live = _add_parser_once(sub, "live", "3pm ET decision: freeze features at yesterday, inject 3pm price, output MOC orders")
     if ap_live:
         add_common(ap_live)
-        ap_live.add_argument("--symbols", type=str, default="", help="Comma-separated tickers (default: all in DATA_SOURCES)")
+        add_symbol_args(ap_live)
         ap_live.add_argument("--model", type=str, default="models/dqn_policy_1y.pt", help="Fallback model if per-symbol file missing")
         ap_live.add_argument("--model-prefix", type=str, default="dqn_splityear", help="Try models/{prefix}_{SYM}.pt first")
         ap_live.add_argument("--cash-per-symbol", type=float, default=1000.0, help="Sizing budget per symbol for BUY")
@@ -3655,7 +3947,7 @@ def main():
     ap_tt = _add_parser_once(sub, "train-today-and-trade", "Refresh data, retrain per symbol, and place immediate market orders")
     if ap_tt:
         add_common(ap_tt)
-        ap_tt.add_argument("--symbols", type=str, default="", help="Comma-separated tickers (default: all in DATA_SOURCES)")
+        add_symbol_args(ap_tt)
         ap_tt.add_argument("--episodes", type=int, default=120, help="Training episodes per symbol")
         ap_tt.add_argument("--model-prefix", type=str, default="dqn_today", help="Model filename prefix in ./models")
         ap_tt.add_argument("--cash-per-symbol", type=float, default=1000.0, help="Budget for BUY sizing per symbol ($)")
@@ -3669,6 +3961,7 @@ def main():
         ap_tt.add_argument("--use-account-equity", action="store_true", help="Use Alpaca account equity as the budget base")
         ap_tt.add_argument("--equity", type=float, default=0.0, help="If not using account equity, supply total equity figure to budget against")
         add_reward_shaping_args(ap_tt)
+        add_train_hparams(ap_tt)  # <-- wired
         ap_tt.set_defaults(func=act_train_today_and_trade)
 
     # --- PROMOTE (new) ---
@@ -3688,10 +3981,8 @@ def main():
     # Map walkleader --tag -> exp mode
     # -------------------------------
     if args.cmd == "walkleader":
-        # default walkleader to exp profile unless user overrode
         if getattr(args, "profile", "prod") == "prod":
             args.profile = "exp"
-        # use --tag as exp-id if not provided
         if not getattr(args, "exp_id", None):
             if getattr(args, "tag", ""):
                 args.exp_id = args.tag
@@ -3726,6 +4017,27 @@ def main():
     # --------------------------------
     if args.cmd in ("live", "train-today-and-trade") and args.profile != "prod":
         raise SystemExit(f"Command '{args.cmd}' is disabled for profile='{args.profile}'. Use --profile prod.")
+
+    # -------------------------------
+    # Normalize symbols for commands
+    # -------------------------------
+    if args.cmd in ("walkforward", "splityear-pooled", "live", "train-today-and-trade"):
+        args.SYMBOLS = resolve_symbols(args)
+    elif args.cmd in ("infer", "export-actions", "splityear"):
+        if hasattr(args, "symbol"):
+            args.SYMBOLS = resolve_symbols(args)
+
+    # -------------------------------
+    # Resolve final symbol list once
+    # -------------------------------
+    multi_cmds = {"walkforward", "splityear-pooled", "live", "train-today-and-trade"}
+    single_cmds = {"infer", "export-actions", "splityear"}
+
+    if args.cmd in multi_cmds:
+        args.SYMBOLS = tuple(resolve_symbols(args))  # uses --symbols/--symbols-file or falls back to DATA_SOURCES
+    elif args.cmd in single_cmds:
+        # normalize to a tuple as well, so downstream code can treat both cases uniformly if desired
+        args.SYMBOLS = tuple(resolve_symbols(args))
 
     # -------------------------------
     # Dispatch
