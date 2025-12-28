@@ -3,9 +3,9 @@
 # .\.venv\Scripts\Activate.ps1
 
 # python .\rl_pipeline3_rs_std_patched.py `
-#   --profile exp --exp-id 2025-11-08_sy_ALL `
+#   --profile exp --exp-id 2025-11-22_sy_ALL `
 #   splityear `
-#   --episodes 400 --oos-days 42 --model-prefix dqn_sy_explore `
+#   --episodes 300 --oos-days 42 --model-prefix dqn_sy_explore `
 #   --eps-start 1.0 --eps-end 0.06 --eps-decay 0.997 `
 #   --updates-per-step 1 --batch 256 --target-sync 500 --update-after 600
 
@@ -240,7 +240,7 @@
 # Remove-Item -Recurse -Force .\daily_cache\
 
 #RUN to train
-# py .\rl_pipeline3_rs_std_patched.py splityear --oos-days 42 --episodes 200 --model-prefix dqn_sy --alpaca-update --since 2024-01-01
+# py .\rl_pipeline3_rs_std_patched.py splityear --oos-days 10 --episodes 200 --model-prefix dqn_sy --alpaca-update --since 2024-01-01
 
 #RUN to infer
 # $env:ALPACA_FEED="iex"; $syms=@("AAPL", "AEP", "AI", "ALB", "AMD", "AMSC", "ARQQ", "ARRY", "BHP", "BYND", "CHGG","ORA", "CLNE", "COST", "ELVA", "ENPH", "ENVX", "EOSE", "EVGO", "FLNC", "FSLR", "GEVO", "GOOGL", "IBM", "INFA", "INTC", "IONQ", "ITRI", "LCID", "MDB", "MNTK", "MRK", "MSFT", "MU", "MVST", "NFLX", "NKLAQ", "NVDA", "NVTS", "NXT", "PAYO", "PG", "PGR", "PLUG", "POWI", "PSTG", "QBTS", "QS", "QUBT", "RGTI", "RMBS", "RNW", "ROP", "SEDG", "SLDP", "SLDPW", "SMCI", "SNOW", "TDC", "TM", "TRV", "TSM", "VICR", "VZ", "XEL"); foreach($s in $syms){ py .\rl_pipeline3_rs_std_patched.py infer --symbol $s --alpaca-update --since 2025-10-15 --provisional-today --log-csv .\logs --debug; Start-Sleep -Milliseconds 400 }
@@ -255,9 +255,10 @@ from __future__ import annotations
 import os, sys, math, time, random, argparse
 from pathlib import Path
 from typing import Dict, Tuple, List, Optional
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, time as dtime, timezone, timedelta  # <-- added time as dtime
 from zoneinfo import ZoneInfo
 import requests
+from dotenv import load_dotenv  # <-- NEW
 import numpy as np
 import pandas as pd
 import csv
@@ -267,6 +268,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import math
 from collections import OrderedDict
+from dataclasses import dataclass, field   # <-- NEW
 
 import torch
 import torch.nn as nn
@@ -277,6 +279,10 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
+
+# Load .env from project root so Alpaca keys are available
+load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+
 
 try:
     # preferred enums (newer alpaca-py)
@@ -2123,125 +2129,135 @@ def act_export_actions(args):
     df.to_csv(out, index=False)
     print(f"Wrote {out.resolve()}")
 
+from pathlib import Path
+from datetime import datetime
 
-def act_infer(args):
-    import pandas as pd, numpy as np, torch
-    from datetime import datetime, timezone
-
-    if getattr(args, "debug", False):
-        print("[infer] start")
-
-    # Build enriched daily with optional provisional today bar
-    d = get_daily_df(
-        args.symbol,
-        alpaca_update=getattr(args, "alpaca_update", False),
-        since=getattr(args, "since", None),
-        include_provisional_today=getattr(args, "provisional_today", False),
-    )
-    if getattr(args, "debug", False):
-        print(f"[infer] got daily df for {args.symbol}: {0 if d is None else len(d)} rows")
-
-    assert_backtester_ready(d)
-
-    # 1y window ending at last row
-    N = len(d)
-    i0 = max(0, N - WINDOW_DAYS)
-    iN = N - 1
-    pre = d.iloc[:i0]
-
-    if len(pre) >= bt.TRADING_DAYS:
-        yoy = float(np.clip(
-            pre[bt.PRICE_COL].iloc[-1] / max(1e-12, pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS]) - 1.0,
-            -0.5, 0.5
-        ))
-        yoy_src = "estimated_from_pre_window"
-    else:
-        yoy = 0.05
-        yoy_src = "fallback_5pct"
-
-    weights = {"SMA_1Y":0.50,"SMA_1M":0.30,"SMA_1W":0.15,"SMA_1D":0.05}
-    env = TradingEnv(d, i0, iN, weights, yoy, True, True, True); env.label = args.symbol
-
-    if getattr(args, "debug", False):
-        last_dt = str(pd.to_datetime(d.loc[iN, "date"]).date()) if "date" in d.columns else iN
-        print(f"[infer] window {i0}->{iN} last={last_dt} yoy={yoy:.4f} ({yoy_src})")
-
-    # Resolve which model file to load (and from where)
-    model_file, model_source = resolve_model_path_for_infer(
-        args, env.label, model_prefix=getattr(args, "model_prefix", None)
-    )
-    if getattr(args, "debug", False):
-        print(f"[infer] profile={args.profile} exp_id={getattr(args,'exp_id',None)}")
-        print(f"[infer] symbol={env.label.upper()}  model_source={model_source}  model_path={model_file}")
-
-    # Load the policy
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    policy = load_policy(model_file, device=device)
-
-    # Single last-bar observation
+def _infer_run_single_model(env, policy, model_kind: str, model_path: str):
+    """Run one policy on env.iN and return a dict for logging."""
+    # base bands for observation
     mid, buf = env._bands(env.iN, base_buf_scale=1.0)
     row = env.d.loc[env.iN]
     obs = make_observation(row, mid, buf, env.yoy_rate)
 
     with torch.no_grad():
         a = _q_argmax_device_safe(policy, obs)
-    b_idx, f_idx, p_idx = decode_action(a)
-    bias = BIAS_CHOICES[b_idx]; buf_scale = BUF_SCALES[f_idx]; pos_frac = POS_FRACS[p_idx]
-    mid_s, buf_s = env._bands(env.iN, base_buf_scale=buf_scale)
-    upper = mid_s * (1.0 + buf_s); lower = mid_s * (1.0 - buf_s)
-    px = float(row[bt.PRICE_COL])
 
+    b_idx, f_idx, p_idx = decode_action(a)
+    bias = BIAS_CHOICES[b_idx]
+    buf_scale = BUF_SCALES[f_idx]
+    pos_frac = POS_FRACS[p_idx]
+
+    # bands for chosen buffer
+    mid_s, buf_s = env._bands(env.iN, base_buf_scale=buf_scale)
+    upper = mid_s * (1.0 + buf_s)
+    lower = mid_s * (1.0 - buf_s)
+
+    px = float(row[bt.PRICE_COL])
     pre_sig = env._candidate_signal(env.iN, bias, upper, lower)
     sig = env._apply_guards(env.iN, bias, pre_sig)
     side = {1: "BUY", 0: "SELL", -1: "HOLD"}[sig]
-    dstr = str(pd.to_datetime(row["date"]).date()) if "date" in row else str(env.iN)
 
-    print(f"\n{env.label} — latest decision for {dstr}")
-    print(f"  Price: {px:.2f}")
-    print(f"  Bias: {bias}  |  Buffer scale: {buf_scale:.2f}  |  Position fraction: {pos_frac:.2f}")
-    print(f"  Mid: {mid_s:.4f}  |  Upper: {upper:.4f}  |  Lower: {lower:.4f}")
-    print(f"  Raw signal: {{1:'BUY',0:'SELL',-1:'HOLD'}}[{pre_sig}]  ->  After guards: {side}")
+    day = pd.to_datetime(row["date"]).date()
 
-    # daily logging (one file per day)
-    if getattr(args, "log_csv", None):
-        # timezone-aware UTC stamp (fixes the utcnow deprecation)
-        ts_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-        day = pd.to_datetime(row["date"]).date() if "date" in row else pd.Timestamp.now(tz="UTC").date()
+    return {
+        "timestamp_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "symbol": env.label,
+        "date_bar": str(day),
+        "price": f"{px:.6f}",
+        "bias": bias,
+        "buf_scale": f"{buf_scale:.3f}",
+        "pos_frac": f"{pos_frac:.3f}",
+        "pre_sig": int(pre_sig),
+        "sig": int(sig),
+        "side": side,
+        "mid": f"{mid_s:.6f}",
+        "upper": f"{upper:.6f}",
+        "lower": f"{lower:.6f}",
+        # NEW fields so review_infers can tell tracks apart
+        "model_kind": model_kind,      # "general" / "bear"
+        "model_path": model_path,
+    }
+
+
+
+def act_infer(args):
+    d = get_daily_df(
+        args.symbol,
+        alpaca_update=args.alpaca_update,
+        since=args.since,
+        include_provisional_today=getattr(args, "provisional_today", False),
+    )
+    assert_backtester_ready(d)
+    N = len(d)
+    i0 = max(0, N - WINDOW_DAYS)
+    iN = N - 1
+
+    pre = d.iloc[:i0]
+    if len(pre) >= bt.TRADING_DAYS:
+        yoy = float(np.clip(
+            pre[bt.PRICE_COL].iloc[-1] / pre[bt.PRICE_COL].iloc[-bt.TRADING_DAYS] - 1.0,
+            -0.5, 0.5
+        ))
+    else:
+        yoy = 0.05
+
+    weights = {"SMA_1Y": 0.50, "SMA_1M": 0.30, "SMA_1W": 0.15, "SMA_1D": 0.05}
+    kw = env_kwargs_from_args(args)
+    env = TradingEnv(d, i0, iN, weights, yoy, True, True, True, **kw)
+    env.label = args.symbol
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # --- decide which models to run ---
+    models_to_run = []
+
+    # 1) general model (whatever infer was called with)
+    gen_path = Path(args.model)
+    if gen_path.exists():
+        models_to_run.append(("general", str(gen_path)))
+    else:
+        print(f"[infer] {args.symbol}: general model missing at {gen_path}")
+
+    # 2) bear model for this symbol, if it exists
+    bear_dir = Path(getattr(args, "bear_model_dir", "models_regime"))
+    bear_prefix = getattr(args, "bear_model_prefix", "dqn_reg_bear")
+    bear_path = bear_dir / f"{bear_prefix}_{args.symbol}.pt"
+    if bear_path.exists():
+        models_to_run.append(("bear", str(bear_path)))
+    else:
+        print(f"[infer] {args.symbol}: no bear model at {bear_path}; skipping.")
+
+    log_rows = []
+
+    for model_kind, mpath in models_to_run:
+        policy = load_policy(mpath, device=device)
+        row = _infer_run_single_model(env, policy, model_kind, mpath)
+
+        # console printout (you can keep this minimal if you like)
+        print(f"\n{env.label} — latest decision ({model_kind}) for {row['date_bar']}")
+        print(f"  Model: {mpath}")
+        print(f"  Price: {row['price']}")
+        print(f"  Bias: {row['bias']}  |  Buffer scale: {row['buf_scale']}  |  Position fraction: {row['pos_frac']}")
+        print(f"  Mid: {row['mid']}  |  Upper: {row['upper']}  |  Lower: {row['lower']}")
+        print(f"  Raw sig: {row['pre_sig']}  ->  After guards: {row['side']}")
+
+        log_rows.append(row)
+
+    # --- logging: same file, multiple rows ---
+    if getattr(args, "log_csv", None) and log_rows:
+        day = pd.to_datetime(d.loc[iN, "date"]).date()
         log_path = _resolve_log_target_dir(args.log_csv, prefix="infer", day=day)
 
-        _csv_append(
-            str(log_path),
-            [
-                "timestamp_utc","profile","exp_id",
-                "symbol","date_bar","price",
-                "bias","buf_scale","pos_frac",
-                "pre_sig","sig","side",
-                "mid","upper","lower",
-                "model_source","model_path"
-            ],
-            {
-                "timestamp_utc": ts_utc,
-                "profile": args.profile,
-                "exp_id": getattr(args, "exp_id", None),
-                "symbol": env.label,
-                "date_bar": str(day),
-                "price": f"{px:.6f}",
-                "bias": bias,
-                "buf_scale": f"{buf_scale:.3f}",
-                "pos_frac": f"{pos_frac:.3f}",
-                "pre_sig": int(pre_sig),
-                "sig": int(sig),
-                "side": side,
-                "mid": f"{mid_s:.6f}",
-                "upper": f"{upper:.6f}",
-                "lower": f"{lower:.6f}",
-                "model_source": model_source,
-                "model_path": model_file,
-            }
-        )
-        print(f"(logged to {log_path})")
+        fieldnames = [
+            "timestamp_utc","symbol","date_bar","price",
+            "bias","buf_scale","pos_frac","pre_sig","sig","side",
+            "mid","upper","lower",
+            "model_kind","model_path",    # NEW
+        ]
 
-
+        for r in log_rows:
+            _csv_append(str(log_path), fieldnames, r)
+        print(f"(logged {len(log_rows)} rows to {log_path})")
 
 def act_walkforward(args):
     import torch
@@ -3876,6 +3892,29 @@ def main():
         add_train_hparams(ap_wf)  # <-- wired
         ap_wf.set_defaults(func=act_walkforward)
 
+    ap_wl = _add_parser_once(sub, "walkleader", "Walk-forward leaderboard (RL uplift vs Rule)")
+    if ap_wl:
+        add_common(ap_wl)
+        ap_wl.add_argument("--train-days", type=int, default=252*2)
+        ap_wl.add_argument("--test-days", type=int, default=21)
+        ap_wl.add_argument("--step-days", type=int, default=None, help="Defaults to --test-days if omitted")
+        ap_wl.add_argument("--episodes", type=int, default=120)
+
+        # outputs
+        ap_wl.add_argument("--detail", type=str, default="")
+        ap_wl.add_argument("--summary", type=str, default="")
+
+        # symbols + tagging
+        add_symbol_args(ap_wl)  # gives --symbols and --symbols-file
+        ap_wl.add_argument("--tag", type=str, default="", help="Run tag (also used as exp-id for isolation)")
+
+        # knobs you’re tuning
+        add_reward_shaping_args(ap_wl)
+        add_train_hparams(ap_wl)  # optional, but useful if you want eps/lr/batch tuning later
+
+        ap_wl.set_defaults(func=act_walkleader)
+
+
     ap_exp = _add_parser_once(sub, "export-actions", "Export greedy action log to CSV for a symbol")
     if ap_exp:
         add_common(ap_exp)
@@ -3894,6 +3933,12 @@ def main():
         ap_inf.add_argument("--save-csv", type=str, default="", help="Optional path to save/append the latest decision")
         ap_inf.add_argument("--log-csv", type=str, default=None, help="Directory for daily action logs (creates infer_YYYY-MM-DD.csv)")
         ap_inf.add_argument("--debug", action="store_true", help="Verbose debug prints for infer")
+        ap_inf.add_argument("--bear-model-dir", type=str, default="models_regime",
+                        help="Directory containing bear regime models (dqn_reg_bear_<SYM>.pt).")
+        ap_inf.add_argument("--bear-model-prefix", type=str, default="dqn_reg_bear",
+                        help="Filename prefix for bear regime models.")
+
+        
         add_reward_shaping_args(ap_inf)
         ap_inf.set_defaults(func=act_infer)
 
